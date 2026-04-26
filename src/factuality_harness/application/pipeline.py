@@ -26,7 +26,9 @@ from ..infrastructure.tools.base import Tool
 from ..infrastructure.tools.calculator import CalculatorTool
 from ..infrastructure.tools.causal_model_stub import CausalModelStub
 from ..infrastructure.tools.optimizer_stub import OptimizerStub
+from ..infrastructure.tools.python_executor import LocalSubprocessPythonExecutor
 from ..infrastructure.tools.rule_engine import RuleEngineTool
+from ..infrastructure.tools.sql_executor import DuckDBSqlExecutor
 from ..infrastructure.tools.theorem_prover_stub import TheoremProverStub
 from .claim_classifier import ClaimClassifier, RuleBasedClaimClassifier
 from .claim_decomposer import ClaimDecomposer, RuleBasedClaimDecomposer
@@ -80,6 +82,8 @@ class FactualityPipeline:
         # Default tool set covers the routes the router declares.
         default_tools: dict[str, Tool] = {
             "calculator": CalculatorTool(),
+            "sql_executor": DuckDBSqlExecutor(),
+            "python_executor": LocalSubprocessPythonExecutor(),
             "rule_engine": RuleEngineTool(),
             "theorem_prover": TheoremProverStub(),
             "causal_model": CausalModelStub(),

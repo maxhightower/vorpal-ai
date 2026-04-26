@@ -21,13 +21,16 @@ class VerificationTask(BaseModel):
 
 # Default routing table. Domain modules may augment this per-claim.
 _DEFAULT_ROUTES: dict[EpistemicType, list[str]] = {
-    EpistemicType.NUMERICAL: ["calculator"],
-    EpistemicType.DIRECT_FACT: ["local_document_retriever"],
-    EpistemicType.LOGICAL: ["rule_engine", "theorem_prover"],
+    # SQL and Python tools no-op cleanly when their context isn't supplied,
+    # so listing them here makes them auto-activate whenever the request
+    # provides ``sql=`` or ``code=`` in extra_context.
+    EpistemicType.NUMERICAL: ["calculator", "sql_executor", "python_executor"],
+    EpistemicType.DIRECT_FACT: ["local_document_retriever", "sql_executor"],
+    EpistemicType.LOGICAL: ["rule_engine", "theorem_prover", "python_executor"],
     EpistemicType.PROCEDURAL: ["rule_engine", "local_document_retriever"],
     EpistemicType.CAUSAL: ["causal_model"],
     EpistemicType.PREDICTIVE: ["causal_model"],
-    EpistemicType.OPTIMIZATION: ["optimizer"],
+    EpistemicType.OPTIMIZATION: ["optimizer", "python_executor"],
     EpistemicType.INTERPRETIVE: ["local_document_retriever"],
     EpistemicType.SPECULATIVE: [],  # nothing verifies pure speculation
     EpistemicType.UNKNOWN: ["local_document_retriever"],

@@ -185,15 +185,35 @@ Test files map to the seven spec checkpoints:
 The system may *propose* modules, but it must not promote them to `ACTIVE`
 without passing evaluation thresholds and (optionally) human approval.
 
+## Real adapters available
+
+The harness ships with both stubs (the originals) and real adapters for the
+highest-leverage extensions:
+
+| Concern | Real implementation | Module |
+|---|---|---|
+| Anthropic LLM | `AnthropicAdapter` (uses `anthropic` SDK, defaults to `claude-opus-4-7`, optional adaptive thinking + system-prompt prefix caching) | `infrastructure/llm/anthropic_adapter.py` |
+| OpenAI LLM | `OpenAIAdapter` (raw httpx; transport-injectable for testing) | `infrastructure/llm/openai_adapter.py` |
+| LLM-backed claim decomposition | `LLMClaimDecomposer` (strict JSON output; hard fallback to rule-based on any parse failure) | `application/llm_claim_decomposer.py` |
+| Structured-data SQL | `DuckDBSqlExecutor` (in-memory or external connection; identifier validation; per-request `tables=` registration) | `infrastructure/tools/sql_executor.py` |
+| Web retrieval | `TavilyWebRetriever` (httpx; transport-injectable) | `infrastructure/retrieval/tavily_web_retriever.py` |
+| Code execution | `LocalSubprocessPythonExecutor` (fresh interpreter per call, wall-clock timeout, optional rlimits — **not** a hardened sandbox) | `infrastructure/tools/python_executor.py` |
+| Causal A/B testing | `ABTestCausalTool` (two-proportion z-test, no scipy) | `infrastructure/tools/ab_test.py` |
+
+Stubs that remain (intentionally honest about what they cannot do):
+
+- Theorem prover (Z3/Lean adapters can be added behind the same protocol).
+- Optimizer (CVXPY/OR-Tools; requires explicit objective + constraints).
+- Forecast model (Prophet/statsforecast).
+- The fallback `CausalModelStub` (still used when no experimental data is supplied).
+
 ## Known limitations
 
-- The LLM adapters are stubs. The MVP runs entirely on rule-based
-  decomposition, classification, and template draft generation. Plug a real
-  LLM adapter in behind `infrastructure/llm/base.py::LLM` to gain quality at
-  the cost of needing to verify everything it produces.
-- Causal, predictive, optimization, and theorem-proving tools are stubs that
-  honestly report "no evidence" rather than fabricate one.
-- The local document retriever is keyword-based.
+- The local document retriever is keyword-based; `TavilyWebRetriever` covers
+  web retrieval but is opt-in (set `TAVILY_API_KEY`).
+- `LocalSubprocessPythonExecutor` is **not** a security boundary. For
+  untrusted code, swap in an E2B/Modal/Daytona adapter behind the same
+  `Tool` protocol.
 - The contradiction checker uses a small antonym table; replace with an NLI
   model or structured policy semantics for production.
 - The self-developing module pipeline is currently a documented design plus

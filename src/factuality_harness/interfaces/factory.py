@@ -5,12 +5,16 @@ and gives one place to swap real adapters in (LLM, retriever, persistence).
 
 Environment variables that change defaults:
 
-  FACTUALITY_HARNESS_LLM_DECOMPOSER  enable LLM-backed claim decomposition
-                                     (1/true/yes). Off by default — keeps the
-                                     harness deterministic unless explicitly opted in.
-  ANTHROPIC_API_KEY                  preferred LLM for decomposition.
-  OPENAI_API_KEY                     fallback LLM for decomposition.
-  FACTUALITY_HARNESS_AUDIT_DIR       directory for JSON audit traces.
+  FACTUALITY_HARNESS_LLM_DECOMPOSER   enable LLM-backed claim decomposition
+                                      (1/true/yes). Off by default — keeps the
+                                      harness deterministic unless explicitly opted in.
+  FACTUALITY_HARNESS_LLM_TRANSLATOR   enable LLM-assisted tool-input translation
+                                      (turns "did X cause Y?" + raw data into a
+                                      causal_inference / forecast / sql payload).
+                                      Off by default.
+  ANTHROPIC_API_KEY                   preferred LLM for both LLM-backed paths.
+  OPENAI_API_KEY                      fallback LLM.
+  FACTUALITY_HARNESS_AUDIT_DIR        directory for JSON audit traces.
 """
 
 from __future__ import annotations
@@ -25,6 +29,10 @@ from ..application.claim_decomposer import (
 from ..application.llm_claim_decomposer import LLMClaimDecomposer
 from ..application.module_registry import ModuleRegistry
 from ..application.pipeline import FactualityPipeline
+from ..application.tool_input_translator import (
+    LLMToolInputTranslator,
+    ToolInputTranslator,
+)
 from ..infrastructure.llm.base import LLM
 from ..infrastructure.storage.repository import (
     AuditRepository,
@@ -106,9 +114,21 @@ def build_decomposer() -> ClaimDecomposer | None:
     return LLMClaimDecomposer(llm=llm, fallback=RuleBasedClaimDecomposer())
 
 
+def build_tool_input_translator() -> ToolInputTranslator | None:
+    """Same opt-in pattern as the decomposer. Off by default."""
+    flag = os.environ.get("FACTUALITY_HARNESS_LLM_TRANSLATOR", "").strip().lower()
+    if flag not in _TRUTHY:
+        return None
+    llm = _build_llm_for_decomposition()
+    if llm is None:
+        return None
+    return LLMToolInputTranslator(llm=llm)
+
+
 def build_pipeline() -> FactualityPipeline:
     return FactualityPipeline(
         decomposer=build_decomposer(),  # may be None -> pipeline default
+        tool_input_translator=build_tool_input_translator(),  # may be None
         module_registry=build_module_registry(),
         audit_repo=build_audit_repo(),
     )

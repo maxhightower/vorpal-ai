@@ -44,6 +44,11 @@ from .final_verifier import (
 )
 from .module_registry import ModuleRegistry
 from .router import ToolRouter
+from .tool_input_translator import (
+    TOOL_INPUT_SPECS,
+    NullToolInputTranslator,
+    ToolInputTranslator,
+)
 from .uncertainty_calibrator import assign_verdicts
 
 
@@ -70,6 +75,7 @@ class FactualityPipeline:
         audit_repo: AuditRepository | None = None,
         module_registry: ModuleRegistry | None = None,
         tools: dict[str, Tool] | None = None,
+        tool_input_translator: ToolInputTranslator | None = None,
     ) -> None:
         self.decomposer = decomposer or RuleBasedClaimDecomposer()
         self.classifier = classifier or RuleBasedClaimClassifier()
@@ -77,6 +83,10 @@ class FactualityPipeline:
         self.draft_generator = draft_generator or TemplateDraftGenerator()
         self.audit_repo = audit_repo or InMemoryAuditRepository()
         self.module_registry = module_registry or ModuleRegistry()
+        # Default to the no-op translator so existing behavior is preserved.
+        self.tool_input_translator = (
+            tool_input_translator or NullToolInputTranslator()
+        )
 
         # Default retriever: an empty in-memory one that can accept per-request docs.
         self.retriever = retriever or LocalDocumentRetriever()
@@ -148,6 +158,25 @@ class FactualityPipeline:
                 }
                 for d in request.documents
             ]
+
+        # 6a — Optional LLM-assisted tool-input translation. The translator
+        # only fills in payloads for tools that (a) appear in the routed
+        # tasks and (b) the user hasn't already supplied context for. Output
+        # is merged into ctx without overwriting user-supplied keys.
+        needed_tools: set[str] = {t for task in tasks for t in task.tool_names}
+        relevant_specs = [
+            TOOL_INPUT_SPECS[name]
+            for name in needed_tools
+            if name in TOOL_INPUT_SPECS
+        ]
+        if relevant_specs:
+            translated = self.tool_input_translator.translate(
+                question=request.question,
+                tool_specs=relevant_specs,
+                existing_context=ctx,
+            )
+            for key, value in (translated or {}).items():
+                ctx.setdefault(key, value)
 
         updated_claims, evidence, tool_records = self.evidence_builder.execute(
             tasks, context=ctx

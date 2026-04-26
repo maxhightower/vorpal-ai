@@ -207,6 +207,14 @@ LLM-backed claim decomposition is opt-in via `FACTUALITY_HARNESS_LLM_DECOMPOSER=
 either `ANTHROPIC_API_KEY` (preferred) or `OPENAI_API_KEY`. The `interfaces/factory.py`
 helper wires the right decomposer at pipeline construction time.
 
+LLM-assisted **tool-input translation** is similarly opt-in via
+`FACTUALITY_HARNESS_LLM_TRANSLATOR=1`. When enabled, the pipeline takes a
+plain-English question + raw data in `extra_context["data"]` and uses the LLM
+to construct properly-shaped `causal_inference`, `forecast`, `sql`, or
+`optimizer` payloads. The translator's output is strictly validated; bad
+output produces no payload (the affected tool fails cleanly) — never a
+fabricated verdict. See `application/tool_input_translator.py`.
+
 Stubs that remain (intentionally honest about what they cannot do):
 
 - Theorem prover (Z3/Lean adapters can be added behind the same protocol).

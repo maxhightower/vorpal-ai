@@ -3,7 +3,15 @@ from __future__ import annotations
 import pytest
 
 from factuality_harness.application.llm_claim_decomposer import LLMClaimDecomposer
-from factuality_harness.interfaces.factory import build_decomposer, build_pipeline
+from factuality_harness.application.tool_input_translator import (
+    LLMToolInputTranslator,
+    NullToolInputTranslator,
+)
+from factuality_harness.interfaces.factory import (
+    build_decomposer,
+    build_pipeline,
+    build_tool_input_translator,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +19,7 @@ def _isolate_env(monkeypatch):
     """Reset all relevant env vars per test so order doesn't matter."""
     for var in (
         "FACTUALITY_HARNESS_LLM_DECOMPOSER",
+        "FACTUALITY_HARNESS_LLM_TRANSLATOR",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
     ):
@@ -67,3 +76,33 @@ def test_build_pipeline_uses_llm_when_configured(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     pipeline = build_pipeline()
     assert isinstance(pipeline.decomposer, LLMClaimDecomposer)
+
+
+def test_build_tool_input_translator_default_returns_none():
+    assert build_tool_input_translator() is None
+
+
+def test_build_tool_input_translator_flag_without_keys_returns_none(monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_TRANSLATOR", "1")
+    assert build_tool_input_translator() is None
+
+
+def test_build_tool_input_translator_with_anthropic_key(monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_TRANSLATOR", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    translator = build_tool_input_translator()
+    assert isinstance(translator, LLMToolInputTranslator)
+
+
+def test_build_pipeline_uses_translator_when_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_AUDIT_DIR", str(tmp_path))
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_TRANSLATOR", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.tool_input_translator, LLMToolInputTranslator)
+
+
+def test_build_pipeline_default_translator_is_null(tmp_path, monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_AUDIT_DIR", str(tmp_path))
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.tool_input_translator, NullToolInputTranslator)

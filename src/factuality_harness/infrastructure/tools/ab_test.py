@@ -75,7 +75,7 @@ def _two_proportion_z(c1: int, n1: int, c2: int, n2: int) -> dict[str, float]:
 
 
 class ABTestCausalTool:
-    name = "causal_model"  # registered under the same key so it replaces the stub
+    name = "ab_test"
 
     def run(self, request: ToolRequest) -> ToolResult:
         exp: dict[str, Any] | None = request.context.get("experiment")

@@ -114,11 +114,107 @@ def modules_propose(
 
 
 @evals_app.command("run")
-def evals_run() -> None:
-    """Run the evaluation suite."""
-    from ..evals.run_evals import run_all  # local import keeps CLI startup snappy
-    summary = run_all()
-    typer.echo(json.dumps(summary, indent=2))
+def evals_run(
+    baseline: Optional[Path] = typer.Option(
+        None,
+        "--baseline",
+        help="Compare current run against this baseline JSON; non-zero exit on regression.",
+    ),
+    save_baseline: Optional[Path] = typer.Option(
+        None,
+        "--save-baseline",
+        help="Write the current run's metrics to this path as a new baseline.",
+    ),
+    tolerance: float = typer.Option(
+        0.0,
+        "--tolerance",
+        help="Allowed metric movement (in absolute units) before flagging a regression.",
+    ),
+    min_metric: list[str] = typer.Option(
+        [],
+        "--min",
+        help="Absolute floor, e.g. --min classification_accuracy=0.8 (repeatable).",
+    ),
+    max_metric: list[str] = typer.Option(
+        [],
+        "--max",
+        help="Absolute ceiling, e.g. --max overclaim_rate=0.1 (repeatable).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON only."),
+) -> None:
+    """Run the evaluation suite, optionally comparing to a baseline."""
+    from ..evals.run_evals import run_with_thresholds  # keep CLI import light
+
+    minima = _parse_metric_pairs(min_metric, "--min")
+    maxima = _parse_metric_pairs(max_metric, "--max")
+
+    report = run_with_thresholds(
+        baseline_path=str(baseline) if baseline else None,
+        save_baseline_path=str(save_baseline) if save_baseline else None,
+        tolerance=tolerance,
+        minima=minima,
+        maxima=maxima,
+    )
+
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        _print_report(report)
+
+    if report.has_violations:
+        raise typer.Exit(code=1)
+
+
+def _parse_metric_pairs(pairs: list[str], flag: str) -> dict[str, float]:
+    parsed: dict[str, float] = {}
+    for raw in pairs:
+        if "=" not in raw:
+            raise typer.BadParameter(
+                f"{flag} expects NAME=VALUE pairs (got {raw!r})."
+            )
+        name, value = raw.split("=", 1)
+        try:
+            parsed[name.strip()] = float(value)
+        except ValueError as e:
+            raise typer.BadParameter(
+                f"{flag} value for {name!r} is not numeric: {value!r}."
+            ) from e
+    return parsed
+
+
+def _print_report(report) -> None:
+    summary = report.summary
+    typer.echo(
+        f"Cases: {summary.passed_cases}/{summary.total_cases} passed "
+        f"({summary.case_pass_rate:.1%})"
+    )
+    typer.echo("Metrics:")
+    for name, value in sorted(summary.metrics.items()):
+        typer.echo(f"  {name:30s} {value:.4f}")
+    failed = [c for c in summary.cases if not c.passed]
+    if failed:
+        typer.echo("")
+        typer.echo("Failed cases:")
+        for c in failed:
+            head = c.error or f"{len(c.failed_checks)} check(s) failed"
+            typer.echo(f"  - {c.name}: {head}")
+            for chk in c.failed_checks:
+                typer.echo(
+                    f"      • {chk.name}  expected={chk.expected!r}  actual={chk.actual!r}"
+                )
+    if report.threshold_violations:
+        typer.echo("")
+        typer.echo("Threshold violations:")
+        for v in report.threshold_violations:
+            typer.echo(f"  - {v.detail}")
+    if report.baseline_violations:
+        typer.echo("")
+        typer.echo("Baseline regressions:")
+        for v in report.baseline_violations:
+            typer.echo(f"  - {v.detail}")
+    if report.saved_baseline_path:
+        typer.echo("")
+        typer.echo(f"Saved baseline to {report.saved_baseline_path}")
 
 
 if __name__ == "__main__":  # pragma: no cover

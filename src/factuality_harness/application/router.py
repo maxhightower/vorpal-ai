@@ -28,10 +28,10 @@ _DEFAULT_ROUTES: dict[EpistemicType, list[str]] = {
     EpistemicType.DIRECT_FACT: ["local_document_retriever", "sql_executor"],
     EpistemicType.LOGICAL: ["rule_engine", "theorem_prover", "python_executor"],
     EpistemicType.PROCEDURAL: ["rule_engine", "local_document_retriever"],
-    # Causal route includes: A/B tool (randomized), DoWhy (observational),
-    # and the stub fallback. Whichever has its context populated produces
-    # evidence; the others no-op cleanly.
-    EpistemicType.CAUSAL: ["causal_model", "causal_inference"],
+    # Causal route: A/B tool (randomized experiments) first, DoWhy
+    # (observational), then the stub fallback. Each no-ops cleanly when
+    # its context isn't supplied.
+    EpistemicType.CAUSAL: ["ab_test", "causal_inference", "causal_model"],
     # Predictive: forecast model first, causal_model stub as fallback so a
     # PREDICTIVE claim with no forecast context still gets the "no evidence"
     # honest signal rather than nothing at all.

@@ -37,6 +37,7 @@ from factuality_harness.infrastructure.storage.repository import (
 )
 from factuality_harness.infrastructure.tools.ab_test import ABTestCausalTool
 from factuality_harness.infrastructure.tools.calculator import CalculatorTool
+from factuality_harness.infrastructure.tools.causal_model_stub import CausalModelStub
 from factuality_harness.infrastructure.tools.optimizer_stub import OptimizerStub
 from factuality_harness.infrastructure.tools.rule_engine import RuleEngineTool
 from factuality_harness.infrastructure.tools.theorem_prover_stub import (
@@ -62,7 +63,8 @@ def build_pipeline() -> FactualityPipeline:
         "calculator": CalculatorTool(),
         "rule_engine": RuleEngineTool(),
         "theorem_prover": TheoremProverStub(),
-        "causal_model": ABTestCausalTool(),
+        "ab_test": ABTestCausalTool(),
+        "causal_model": CausalModelStub(),
         "optimizer": OptimizerStub(),
     }
     repo = InMemoryAuditRepository()

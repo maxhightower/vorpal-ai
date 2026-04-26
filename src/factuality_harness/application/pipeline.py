@@ -22,6 +22,7 @@ from ..infrastructure.storage.repository import (
     AuditRepository,
     InMemoryAuditRepository,
 )
+from ..infrastructure.tools.ab_test import ABTestCausalTool
 from ..infrastructure.tools.base import Tool
 from ..infrastructure.tools.calculator import CalculatorTool
 from ..infrastructure.tools.causal_inference import CausalInferenceTool
@@ -99,6 +100,7 @@ class FactualityPipeline:
             "rule_engine": RuleEngineTool(),
             "theorem_prover": TheoremProverStub(),
             "causal_model": CausalModelStub(),
+            "ab_test": ABTestCausalTool(),
             "causal_inference": CausalInferenceTool(),
             "forecast": ForecastTool(),
             "optimizer": LinearOptimizerTool(),

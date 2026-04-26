@@ -15,6 +15,17 @@ from .evidence import (
 from .verdicts import ClaimVerdict, FinalAnswer, Verdict
 from .audit import AuditTrace
 from .modules import ModuleStatus, ModuleSpec
+from .module_lifecycle import (
+    ClaimCategory,
+    DomainGap,
+    ModuleProposal,
+    PromotionDecision,
+    PromotionGate,
+    RouteProposal,
+    ShadowMetrics,
+    ShadowVerdict,
+    SourceProposal,
+)
 
 __all__ = [
     "EpistemicType",
@@ -34,4 +45,13 @@ __all__ = [
     "AuditTrace",
     "ModuleStatus",
     "ModuleSpec",
+    "ClaimCategory",
+    "DomainGap",
+    "ModuleProposal",
+    "PromotionDecision",
+    "PromotionGate",
+    "RouteProposal",
+    "ShadowMetrics",
+    "ShadowVerdict",
+    "SourceProposal",
 ]

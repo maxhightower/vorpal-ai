@@ -90,11 +90,8 @@ def assign_verdict(claim: Claim, evidence: list[Evidence]) -> ClaimVerdict:
 
     # Causal claims: only causal-model or experimental evidence counts.
     if claim.epistemic_type == EpistemicType.CAUSAL:
-        causal_supports = [
-            e
-            for e in evs
-            if e.source_type == SourceType.CAUSAL_MODEL and _supports(e)
-        ]
+        causal_evs = [e for e in evs if e.source_type == SourceType.CAUSAL_MODEL]
+        causal_supports = [e for e in causal_evs if _supports(e)]
         if causal_supports:
             return ClaimVerdict(
                 claim_id=claim.id,
@@ -102,6 +99,24 @@ def assign_verdict(claim: Claim, evidence: list[Evidence]) -> ClaimVerdict:
                 confidence=ConfidenceLevel.MEDIUM,
                 rationale="Causal evidence available; effect supported by causal model.",
                 evidence_ids=[e.id for e in causal_supports],
+            )
+        # A causal model ran but failed to reach a SUPPORTS verdict (e.g. an
+        # A/B test with a non-significant result). Distinguish this from "no
+        # causal model was run at all" so the rationale is accurate.
+        if causal_evs:
+            return ClaimVerdict(
+                claim_id=claim.id,
+                verdict=Verdict.UNSUPPORTED,
+                confidence=ConfidenceLevel.LOW,
+                rationale=(
+                    "Causal model ran but did not return support for the effect "
+                    "(e.g. result not statistically significant). Causation cannot "
+                    "be claimed."
+                ),
+                evidence_ids=[e.id for e in evs],
+                limitations=[
+                    "Insufficient power, noisy effect, or genuine null result.",
+                ],
             )
         return ClaimVerdict(
             claim_id=claim.id,

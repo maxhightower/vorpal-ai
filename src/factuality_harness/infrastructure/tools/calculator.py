@@ -22,6 +22,15 @@ _PCT_CHANGE = re.compile(
     re.IGNORECASE,
 )
 
+# Words that indicate the user is asking about a delta, even without the
+# literal token "percent"/"%". When one of these appears alongside a "X to Y"
+# pattern, treat the claim as a percentage-change query.
+_DELTA_KEYWORDS = re.compile(
+    r"\b(change|increase|decrease|grew|grow|growth|drop|drops|dropped|"
+    r"rise|rises|rose|fell|fall|delta|lift|gain|loss|moved)\b",
+    re.IGNORECASE,
+)
+
 # Plain arithmetic expression of the form "<num> <op> <num>".
 _ARITH = re.compile(
     r"(?P<a>-?\d+(?:\.\d+)?)\s*(?P<op>[\+\-\*/x×])\s*(?P<b>-?\d+(?:\.\d+)?)",
@@ -41,7 +50,12 @@ class CalculatorTool:
         text = request.claim.text
 
         # Percentage change has highest priority because it overlaps with arithmetic.
-        if "percent" in text.lower() or "%" in text:
+        wants_pct = (
+            "percent" in text.lower()
+            or "%" in text
+            or _DELTA_KEYWORDS.search(text) is not None
+        )
+        if wants_pct:
             m = _PCT_CHANGE.search(text)
             if m:
                 a = float(m.group("a"))

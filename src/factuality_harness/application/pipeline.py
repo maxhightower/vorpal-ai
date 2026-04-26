@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..domain.audit import AuditTrace
 from ..domain.claims import Claim
@@ -47,6 +47,10 @@ class PipelineRequest(BaseModel):
     question: str
     domain_hint: str | None = None
     documents: list[Document] = []
+    # Free-form context handed verbatim to every tool. Use this for structured
+    # payloads (experimental data, time series, reference tables) that do not
+    # fit naturally into ``documents``.
+    extra_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class FactualityPipeline:
@@ -122,7 +126,10 @@ class FactualityPipeline:
         }
 
         # 6 — execute tasks (per-request context lets rule engine see policy docs)
-        ctx: dict[str, Any] = {"documents": [d.model_dump() for d in request.documents]}
+        ctx: dict[str, Any] = {
+            "documents": [d.model_dump() for d in request.documents],
+            **request.extra_context,
+        }
         if request.documents:
             # Surface documents as candidate rules so procedural claims hit them.
             ctx["rules"] = [

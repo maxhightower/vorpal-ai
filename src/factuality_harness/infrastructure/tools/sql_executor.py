@@ -71,12 +71,21 @@ class DuckDBSqlExecutor:
         self._max_rows = max_rows
 
     def register_table(self, name: str, rows: list[dict[str, Any]]) -> None:
-        """Register an in-memory table. Identifiers are validated; values
-        flow through parameter binding."""
+        """Register a table on the executor's default connection. Use
+        ``_register_table_on`` to target a different connection (e.g. a
+        warehouse handed in via context)."""
+        self._register_table_on(self._conn, name, rows)
+
+    @staticmethod
+    def _register_table_on(
+        conn: duckdb.DuckDBPyConnection,
+        name: str,
+        rows: list[dict[str, Any]],
+    ) -> None:
         table = _validate_identifier(name)
 
         if not rows:
-            self._conn.execute(
+            conn.execute(
                 f'CREATE OR REPLACE TABLE "{table}" (placeholder INTEGER)'
             )
             return
@@ -85,14 +94,13 @@ class DuckDBSqlExecutor:
         for c in cols:
             _validate_identifier(c)
 
-        # Infer column types from the first non-null value per column.
         col_types: dict[str, str] = {}
         for c in cols:
             sample = next((r.get(c) for r in rows if r.get(c) is not None), None)
             col_types[c] = _python_to_sql_type(sample)
 
         column_defs = ", ".join(f'"{c}" {col_types[c]}' for c in cols)
-        self._conn.execute(f'CREATE OR REPLACE TABLE "{table}" ({column_defs})')
+        conn.execute(f'CREATE OR REPLACE TABLE "{table}" ({column_defs})')
 
         placeholders = ", ".join(["?"] * len(cols))
         insert_sql = (
@@ -100,7 +108,7 @@ class DuckDBSqlExecutor:
             + ", ".join(f'"{c}"' for c in cols)
             + f") VALUES ({placeholders})"
         )
-        self._conn.executemany(insert_sql, [tuple(r.get(c) for c in cols) for r in rows])
+        conn.executemany(insert_sql, [tuple(r.get(c) for c in cols) for r in rows])
 
     def run(self, request: ToolRequest) -> ToolResult:
         sql = request.context.get("sql")
@@ -110,14 +118,24 @@ class DuckDBSqlExecutor:
                 error="DuckDBSqlExecutor requires request.context['sql'].",
             )
 
+        # If the data-source router selected a warehouse for this request,
+        # the pipeline drops its connection here. Use that connection
+        # instead of the executor's default in-memory one so the SQL runs
+        # against the real warehouse data.
+        sql_connection = request.context.get("sql_connection")
+        active_conn = sql_connection if sql_connection is not None else self._conn
+
         tables = request.context.get("tables") or {}
         if isinstance(tables, dict):
             for table_name, rows in tables.items():
                 if isinstance(rows, list):
-                    self.register_table(table_name, rows)
+                    # Register against the active connection — registering
+                    # against self._conn when a warehouse was passed would
+                    # hide tables from the actual query target.
+                    self._register_table_on(active_conn, table_name, rows)
 
         try:
-            cursor = self._conn.execute(sql)
+            cursor = active_conn.execute(sql)
             columns = [d[0] for d in cursor.description] if cursor.description else []
             data = cursor.fetchmany(self._max_rows)
         except (duckdb.Error, ValueError) as e:

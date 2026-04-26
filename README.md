@@ -277,6 +277,31 @@ to construct properly-shaped `causal_inference`, `forecast`, `sql`, or
 output produces no payload (the affected tool fails cleanly) — never a
 fabricated verdict. See `application/tool_input_translator.py`.
 
+### Data acquisition (Phase A)
+
+The harness has a typed data catalog, real connectors behind a uniform
+protocol, and a discovery layer that picks relevant sources per request.
+
+| Piece | Module |
+|---|---|
+| Catalog model | `domain/catalog.py::DataCatalogEntry`, `DataCatalog` |
+| `DataSource` protocol | `infrastructure/data_sources/base.py` |
+| DuckDB warehouse connector | `infrastructure/data_sources/warehouse_duckdb.py::DuckDBWarehouseSource` (introspects via `information_schema`) |
+| SEC EDGAR REST connector | `infrastructure/data_sources/sec_edgar.py::SECEdgarSource` (scaffolded; static introspect, network on `handle().get_company_facts(cik)`) |
+| Discovery layer | `application/data_source_router.py::KeywordDataSourceRouter`, `LLMDataSourceRouter` |
+| Pipeline integration | Discovery records to `AuditTrace.data_sources_consulted`; warehouse handle dropped into `ctx['sql_connection']` for the SQL executor |
+| Vertical: FinanceModule | `modules/finance.py::FinanceModule` (use `FinanceModule(active=True)`); end-to-end demo at `demos/finance_warehouse.py` |
+
+End-to-end finance demo:
+```sh
+.venv/bin/python demos/finance_warehouse.py
+```
+
+The discovery layer picks `financials`, the LLM-assisted translator
+writes a SQL payload against the introspected schema, the SQL executor
+runs it against the warehouse's connection, and the verdict is
+`SUPPORTED · HIGH` with the warehouse row as evidence.
+
 **Code-execution backend** is selectable via `FACTUALITY_HARNESS_PYTHON_EXECUTOR`:
 
 | Value | Backend |

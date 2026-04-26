@@ -86,8 +86,9 @@ _RULES: list[tuple[EpistemicType, re.Pattern[str]]] = [
     (
         EpistemicType.DIRECT_FACT,
         re.compile(
-            r"\b(who|what is|where|when|which|how many of|name of|"
-            r"current|today|as of|capital of|founded|headquartered)\b",
+            r"\b(who|what (?:is|was|were|are)|where|when|which|"
+            r"how many of|name of|current|today|as of|capital of|"
+            r"founded|headquartered|how was|tell me about)\b",
             re.IGNORECASE,
         ),
     ),

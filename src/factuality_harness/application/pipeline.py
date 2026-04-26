@@ -86,6 +86,7 @@ class FactualityPipeline:
         contradiction_detector: ContradictionDetector | None = None,
         data_catalog: DataCatalog | None = None,
         data_source_router: DataSourceRouter | None = None,
+        data_sources: dict[str, Any] | None = None,
     ) -> None:
         self.decomposer = decomposer or RuleBasedClaimDecomposer()
         self.classifier = classifier or RuleBasedClaimClassifier()
@@ -107,6 +108,9 @@ class FactualityPipeline:
         # the discovery layer activate.
         self.data_catalog = data_catalog or DataCatalog()
         self.data_source_router = data_source_router or NullDataSourceRouter()
+        # source_id -> DataSource. Used by the pipeline to look up the
+        # native handle of a connector the discovery layer selected.
+        self._data_sources: dict[str, Any] = dict(data_sources or {})
 
         # Default retriever: an empty in-memory one that can accept per-request docs.
         self.retriever = retriever or LocalDocumentRetriever()
@@ -182,7 +186,10 @@ class FactualityPipeline:
 
         # 6 (pre-translate) — Discovery: pick relevant catalog entries.
         # Recorded to the audit trace and surfaced via ctx["data"] so the
-        # LLM-assisted translator can write payloads against them.
+        # LLM-assisted translator can write payloads against them. For
+        # warehouse sources we ALSO drop the live native handle into
+        # ctx["sql_connection"] so the SQL executor can run queries
+        # against the real warehouse instead of an empty default.
         consulted_sources = self.data_source_router.route(
             question=request.question,
             claims=classified_claims,
@@ -193,8 +200,6 @@ class FactualityPipeline:
             existing_data = ctx.get("data") if isinstance(ctx.get("data"), dict) else {}
             data_block = dict(existing_data or {})
             for entry in consulted_sources:
-                # Only describe the source's *schema* in ctx; the actual
-                # query happens via tools that hold native handles.
                 data_block.setdefault(
                     f"source:{entry.source_id}",
                     {
@@ -212,6 +217,17 @@ class FactualityPipeline:
                     },
                 )
             ctx["data"] = data_block
+
+            # Drop warehouse connections into ctx for the SQL executor.
+            # First warehouse wins — multi-warehouse routing is future work.
+            for entry in consulted_sources:
+                handle = self._data_sources.get(entry.source_id)
+                if handle is not None and "sql_connection" not in ctx:
+                    try:
+                        ctx["sql_connection"] = handle.handle()
+                    except Exception:
+                        pass
+                    break
 
         # 6a — Optional LLM-assisted tool-input translation. The translator
         # only fills in payloads for tools that (a) appear in the routed

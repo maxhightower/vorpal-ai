@@ -47,6 +47,7 @@ from .final_verifier import (
     revise_answer,
     verify_draft_claims,
 )
+from .data_source_router import DataSourceRouter, NullDataSourceRouter
 from .module_registry import ModuleRegistry
 from .router import ToolRouter
 from .tool_input_translator import (
@@ -55,6 +56,7 @@ from .tool_input_translator import (
     ToolInputTranslator,
 )
 from .uncertainty_calibrator import assign_verdicts
+from ..domain.catalog import DataCatalog
 
 
 class PipelineRequest(BaseModel):
@@ -82,6 +84,8 @@ class FactualityPipeline:
         tools: dict[str, Tool] | None = None,
         tool_input_translator: ToolInputTranslator | None = None,
         contradiction_detector: ContradictionDetector | None = None,
+        data_catalog: DataCatalog | None = None,
+        data_source_router: DataSourceRouter | None = None,
     ) -> None:
         self.decomposer = decomposer or RuleBasedClaimDecomposer()
         self.classifier = classifier or RuleBasedClaimClassifier()
@@ -98,6 +102,11 @@ class FactualityPipeline:
         self.contradiction_detector = (
             contradiction_detector or LexicalContradictionDetector()
         )
+        # Empty catalog + null router by default — existing pipelines
+        # behave exactly as before. Only when a catalog is supplied does
+        # the discovery layer activate.
+        self.data_catalog = data_catalog or DataCatalog()
+        self.data_source_router = data_source_router or NullDataSourceRouter()
 
         # Default retriever: an empty in-memory one that can accept per-request docs.
         self.retriever = retriever or LocalDocumentRetriever()
@@ -170,6 +179,39 @@ class FactualityPipeline:
                 }
                 for d in request.documents
             ]
+
+        # 6 (pre-translate) — Discovery: pick relevant catalog entries.
+        # Recorded to the audit trace and surfaced via ctx["data"] so the
+        # LLM-assisted translator can write payloads against them.
+        consulted_sources = self.data_source_router.route(
+            question=request.question,
+            claims=classified_claims,
+            catalog=self.data_catalog,
+        )
+        trace.data_sources_consulted = list(consulted_sources)
+        if consulted_sources:
+            existing_data = ctx.get("data") if isinstance(ctx.get("data"), dict) else {}
+            data_block = dict(existing_data or {})
+            for entry in consulted_sources:
+                # Only describe the source's *schema* in ctx; the actual
+                # query happens via tools that hold native handles.
+                data_block.setdefault(
+                    f"source:{entry.source_id}",
+                    {
+                        "kind": entry.kind.value,
+                        "description": entry.description,
+                        "tables": [
+                            {
+                                "name": t.name,
+                                "columns": t.columns,
+                                "row_count": t.row_count,
+                                "sample_rows": t.sample_rows,
+                            }
+                            for t in entry.tables
+                        ],
+                    },
+                )
+            ctx["data"] = data_block
 
         # 6a — Optional LLM-assisted tool-input translation. The translator
         # only fills in payloads for tools that (a) appear in the routed

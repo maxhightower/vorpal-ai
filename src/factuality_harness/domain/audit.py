@@ -7,6 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from .claims import Claim
+from .catalog import DataCatalogEntry
 from .evidence import Evidence
 from .module_lifecycle import ShadowVerdict
 from .verdicts import ClaimVerdict
@@ -35,6 +36,10 @@ class AuditTrace(BaseModel):
     decomposed_claims: list[Claim] = Field(default_factory=list)
     claim_classifications: dict[str, str] = Field(default_factory=dict)
     tools_called: list[ToolCallRecord] = Field(default_factory=list)
+    # Data sources the discovery layer selected for this run. Recorded in
+    # the audit trace so callers can see which connectors were touched
+    # (and which were skipped) per request.
+    data_sources_consulted: list[DataCatalogEntry] = Field(default_factory=list)
     retrieved_evidence: list[Evidence] = Field(default_factory=list)
     contradictions_found: list[str] = Field(default_factory=list)
     verdicts: list[ClaimVerdict] = Field(default_factory=list)

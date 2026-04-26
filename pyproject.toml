@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factuality-harness"
+version = "0.1.0"
+description = "A claim-governed reasoning harness that improves factual reliability of LLM systems."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Vorpal AI" }]
+license = { text = "Proprietary" }
+dependencies = [
+    "pydantic>=2.6",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "structlog>=24.1",
+    "typer>=0.12",
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+fh = "factuality_harness.interfaces.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

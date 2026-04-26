@@ -199,12 +199,13 @@ highest-leverage extensions:
 | Web retrieval | `TavilyWebRetriever` (httpx; transport-injectable) | `infrastructure/retrieval/tavily_web_retriever.py` |
 | Code execution | `LocalSubprocessPythonExecutor` (fresh interpreter per call, wall-clock timeout, optional rlimits — **not** a hardened sandbox) | `infrastructure/tools/python_executor.py` |
 | Causal A/B testing | `ABTestCausalTool` (two-proportion z-test, no scipy) | `infrastructure/tools/ab_test.py` |
+| Causal inference (observational) | `CausalInferenceTool` (DoWhy: backdoor / IV / frontdoor; CI + p-value + refutation) | `infrastructure/tools/causal_inference.py` |
+| Forecasting | `ForecastTool` (statsforecast AutoARIMA; calibrated prediction intervals; baseline + direction scoring) | `infrastructure/tools/forecast.py` |
 
 Stubs that remain (intentionally honest about what they cannot do):
 
 - Theorem prover (Z3/Lean adapters can be added behind the same protocol).
 - Optimizer (CVXPY/OR-Tools; requires explicit objective + constraints).
-- Forecast model (Prophet/statsforecast).
 - The fallback `CausalModelStub` (still used when no experimental data is supplied).
 
 ## Known limitations

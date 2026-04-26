@@ -24,7 +24,9 @@ from ..infrastructure.storage.repository import (
 )
 from ..infrastructure.tools.base import Tool
 from ..infrastructure.tools.calculator import CalculatorTool
+from ..infrastructure.tools.causal_inference import CausalInferenceTool
 from ..infrastructure.tools.causal_model_stub import CausalModelStub
+from ..infrastructure.tools.forecast import ForecastTool
 from ..infrastructure.tools.optimizer_stub import OptimizerStub
 from ..infrastructure.tools.python_executor import LocalSubprocessPythonExecutor
 from ..infrastructure.tools.rule_engine import RuleEngineTool
@@ -87,6 +89,8 @@ class FactualityPipeline:
             "rule_engine": RuleEngineTool(),
             "theorem_prover": TheoremProverStub(),
             "causal_model": CausalModelStub(),
+            "causal_inference": CausalInferenceTool(),
+            "forecast": ForecastTool(),
             "optimizer": OptimizerStub(),
         }
         if tools:

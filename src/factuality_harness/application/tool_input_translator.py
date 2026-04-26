@@ -134,6 +134,23 @@ TOOL_INPUT_SPECS: dict[str, ToolInputSpec] = {
         # how the translator handles this.
         required_top_level_keys=["sql"],
     ),
+    "theorem_prover": ToolInputSpec(
+        tool_name="theorem_prover",
+        context_key="logic",
+        description=(
+            "Z3 SMT solver for LOGICAL claims. Use ONLY when the claim is "
+            "formal enough to encode as a small SMT-LIB problem with declared "
+            "variables and explicit assertions. Never invent variables or "
+            "constraints; if the claim is open-domain prose, omit this tool."
+        ),
+        example_payload={
+            "declares": [{"name": "x", "sort": "Int"}],
+            "asserts": ["(> x 10)", "(< x 20)"],
+            "query": "entails",
+            "goal": "(> x 5)",
+        },
+        required_top_level_keys=["declares", "asserts", "query"],
+    ),
     "optimizer": ToolInputSpec(
         tool_name="optimizer",
         context_key="optimization",

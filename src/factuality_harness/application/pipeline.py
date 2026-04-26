@@ -33,6 +33,7 @@ from ..infrastructure.tools.python_executor import LocalSubprocessPythonExecutor
 from ..infrastructure.tools.rule_engine import RuleEngineTool
 from ..infrastructure.tools.sql_executor import DuckDBSqlExecutor
 from ..infrastructure.tools.theorem_prover_stub import TheoremProverStub
+from ..infrastructure.tools.theorem_prover_z3 import Z3LogicalProverTool
 from .claim_classifier import ClaimClassifier, RuleBasedClaimClassifier
 from .claim_decomposer import ClaimDecomposer, RuleBasedClaimDecomposer
 from .contradiction_checker import (
@@ -121,7 +122,12 @@ class FactualityPipeline:
             "sql_executor": DuckDBSqlExecutor(),
             "python_executor": LocalSubprocessPythonExecutor(),
             "rule_engine": RuleEngineTool(),
-            "theorem_prover": TheoremProverStub(),
+            # Real Z3 prover. Falls back cleanly (clean error, no evidence)
+            # when the claim has no formalized payload — the verdict
+            # calibrator then routes LOGICAL claims through UNCLEAR. The
+            # original TheoremProverStub remains importable for callers
+            # that explicitly want the "honest no-evidence" fallback.
+            "theorem_prover": Z3LogicalProverTool(),
             "causal_model": CausalModelStub(),
             "ab_test": ABTestCausalTool(),
             "causal_inference": CausalInferenceTool(),

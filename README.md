@@ -322,7 +322,14 @@ known antonym-pair contradiction. See `application/contradiction_checker.py`.
 
 Stubs that remain (intentionally honest about what they cannot do):
 
-- Theorem prover (Z3/Lean adapters can be added behind the same protocol).
+- Theorem prover — `Z3LogicalProverTool` is the default for `LOGICAL` claims.
+  Accepts SMT-LIB v2 directly via `extra_context["smt_lib"]` or a structured
+  payload (`{declares, asserts, query, goal}`) via `extra_context["logic"]`.
+  Maps Z3's `unsat` / `sat` results to `SUPPORTS` / `CONTRADICTS` / `INSUFFICIENT`
+  per query semantics; the verdict calibrator promotes `SUPPORTS` to
+  `FORMALLY_PROVEN`. NL→SMT translation for open-domain claims is research-grade
+  and remains the responsibility of the caller (or an opt-in
+  `LLMToolInputTranslator`, which now has a `theorem_prover` spec).
 - The fallback `CausalModelStub` (still used when no experimental data is supplied).
 
 ## Known limitations

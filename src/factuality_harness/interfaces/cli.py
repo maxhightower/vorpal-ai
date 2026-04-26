@@ -33,6 +33,66 @@ app.add_typer(evals_app, name="evals")
 
 
 @app.command()
+def verify(
+    draft: str = typer.Argument(..., help="The draft answer text to fact-check."),
+    question: Optional[str] = typer.Option(
+        None,
+        "--question",
+        help="Original question that the draft answers; used to drive evidence "
+        "gathering. If omitted, the draft itself drives decomposition.",
+    ),
+    documents: Optional[Path] = typer.Option(
+        None,
+        "--documents",
+        help="Path to a JSON list of documents [{name, text, effective_date?}, ...].",
+    ),
+    extra_context: Optional[Path] = typer.Option(
+        None,
+        "--extra-context",
+        help="Path to a JSON object passed verbatim as extra_context (data, sql, etc.).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of text."),
+) -> None:
+    """Fact-check a pre-written draft answer against the harness.
+
+    Use case: an outer LLM agent has produced an answer; you want to
+    verify each claim it makes is supported by evidence the harness can
+    actually reach. Returns the revised answer (with unsupported claims
+    qualified or removed) plus a list of what was dropped.
+    """
+    docs: list[Document] = []
+    if documents is not None:
+        raw = json.loads(documents.read_text(encoding="utf-8"))
+        docs = [Document.model_validate(d) for d in raw]
+
+    ctx: dict = {}
+    if extra_context is not None:
+        ctx = json.loads(extra_context.read_text(encoding="utf-8"))
+
+    pipeline = build_pipeline()
+    final = pipeline.verify_draft(
+        draft=draft,
+        question=question,
+        documents=docs,
+        extra_context=ctx,
+    )
+
+    if json_output:
+        typer.echo(final.model_dump_json(indent=2))
+        return
+
+    typer.echo(final.answer)
+    typer.echo("")
+    typer.echo(f"Confidence summary: {final.confidence_summary}")
+    typer.echo(f"Audit ID: {final.audit_id}")
+    if final.unsupported_or_uncertain_claims:
+        typer.echo("")
+        typer.echo("Unsupported / uncertain claims (dropped or qualified):")
+        for c in final.unsupported_or_uncertain_claims:
+            typer.echo(f"  - {c}")
+
+
+@app.command()
 def answer(
     question: str = typer.Argument(..., help="The question to answer."),
     documents: Optional[Path] = typer.Option(

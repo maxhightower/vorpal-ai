@@ -139,6 +139,69 @@ class FactualityPipeline:
     # ------------------------------------------------------------------
 
     def run(self, request: PipelineRequest) -> FinalAnswer:
+        trace, table = self._build_evidence_table(request)
+
+        # 10 — draft answer (the harness composes its own draft).
+        draft = self.draft_generator.generate(table)
+        trace.draft_answer = draft
+
+        return self._verify_against_table(
+            draft=draft,
+            question=request.question,
+            table=table,
+            trace=trace,
+        )
+
+    def verify_draft(
+        self,
+        *,
+        draft: str,
+        question: str | None = None,
+        documents: list[Document] | None = None,
+        extra_context: dict[str, Any] | None = None,
+    ) -> FinalAnswer:
+        """Verify a pre-written draft answer against the harness.
+
+        Use case: an outer agent has produced a draft answer (its own
+        composition) and wants the harness to fact-check it. The harness
+        decomposes the source question (or the draft itself if no question
+        is supplied) into claims, gathers evidence for them, and then
+        cross-checks the supplied draft against that evidence — keeping
+        SUPPORTED/COMPUTED claims, qualifying LOW-confidence ones, and
+        dropping any draft assertion that doesn't map to a verified
+        upstream claim.
+
+        Returns a ``FinalAnswer`` whose ``answer`` field is the revised
+        draft and ``unsupported_or_uncertain_claims`` lists what the
+        harness pulled out or qualified.
+        """
+        if not draft or not draft.strip():
+            raise ValueError("verify_draft: draft must be non-empty.")
+
+        request = PipelineRequest(
+            question=question or draft,
+            documents=list(documents or []),
+            extra_context=dict(extra_context or {}),
+        )
+        trace, table = self._build_evidence_table(request)
+
+        # Skip the harness's own draft generator — use the supplied one.
+        trace.draft_answer = draft
+
+        return self._verify_against_table(
+            draft=draft,
+            question=request.question,
+            table=table,
+            trace=trace,
+        )
+
+    # ------------------------------------------------------------------
+    # Internal stages — used by both run() and verify_draft()
+    # ------------------------------------------------------------------
+
+    def _build_evidence_table(
+        self, request: PipelineRequest
+    ) -> tuple[AuditTrace, "EvidenceTable"]:
         trace = AuditTrace(original_question=request.question)
 
         # Per-request retriever: replace the default in-memory store so each
@@ -278,18 +341,25 @@ class FactualityPipeline:
             updated_claims, evidence, verdicts
         )
 
-        # 10 — draft answer
-        draft = self.draft_generator.generate(table)
-        trace.draft_answer = draft
+        return trace, table
 
-        # 11-12 — extract + re-verify draft claims
+    def _verify_against_table(
+        self,
+        *,
+        draft: str,
+        question: str,
+        table: "EvidenceTable",
+        trace: AuditTrace,
+    ) -> FinalAnswer:
+        """Stages 11-13: extract claims from the (supplied or generated)
+        draft, verify them against the evidence table, revise. Persists
+        the audit trace. Used by both ``run()`` and ``verify_draft()``."""
         extractor = TemplateDraftClaimExtractor()
         draft_claims = extractor.extract(draft, table)
         draft_verdicts = verify_draft_claims(draft_claims, table)
 
-        # 13 — revise into final answer
         final = revise_answer(
-            question=request.question,
+            question=question,
             draft=draft,
             draft_verdicts=draft_verdicts,
             table=table,
@@ -298,10 +368,7 @@ class FactualityPipeline:
         trace.final_answer = final.answer
         trace.unsupported_claims_removed = list(final.unsupported_or_uncertain_claims)
 
-        # 14 — persist
         self.audit_repo.save(trace)
-
-        # 15 — return
         return final
 
     # ------------------------------------------------------------------

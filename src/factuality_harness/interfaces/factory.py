@@ -15,8 +15,12 @@ Environment variables that change defaults:
   FACTUALITY_HARNESS_LLM_CONTRADICTION enable LLM-backed NLI contradiction
                                       detection (catches non-lexical conflicts
                                       the antonym table misses). Off by default.
+  FACTUALITY_HARNESS_PYTHON_EXECUTOR  backend for code execution evidence.
+                                      One of: local (default), anthropic, e2b,
+                                      self_hosted.
   ANTHROPIC_API_KEY                   preferred LLM for all LLM-backed paths.
   OPENAI_API_KEY                      fallback LLM.
+  E2B_API_KEY                         required if FACTUALITY_HARNESS_PYTHON_EXECUTOR=e2b.
   FACTUALITY_HARNESS_AUDIT_DIR        directory for JSON audit traces.
 """
 
@@ -41,6 +45,7 @@ from ..application.tool_input_translator import (
     ToolInputTranslator,
 )
 from ..infrastructure.llm.base import LLM
+from ..infrastructure.tools.base import Tool
 from ..infrastructure.storage.repository import (
     AuditRepository,
     JsonAuditRepository,
@@ -132,6 +137,49 @@ def build_tool_input_translator() -> ToolInputTranslator | None:
     return LLMToolInputTranslator(llm=llm)
 
 
+_PYTHON_EXECUTOR_BACKENDS = {"local", "anthropic", "e2b", "self_hosted"}
+
+
+def build_python_executor() -> Tool | None:
+    """Return a non-default Python executor when explicitly selected.
+
+    Returning ``None`` lets ``FactualityPipeline`` keep its built-in
+    ``LocalSubprocessPythonExecutor``. Other backends are constructed
+    lazily so the factory itself stays light.
+    """
+    backend = os.environ.get("FACTUALITY_HARNESS_PYTHON_EXECUTOR", "local").strip().lower()
+    if backend not in _PYTHON_EXECUTOR_BACKENDS:
+        return None
+    if backend == "local":
+        return None  # pipeline default
+
+    if backend == "anthropic":
+        # Requires ANTHROPIC_API_KEY at run time, but constructing the
+        # adapter without one is allowed (the SDK reads env vars itself).
+        from ..infrastructure.tools.python_executor_anthropic import (
+            AnthropicCodeExecutor,
+        )
+
+        try:
+            return AnthropicCodeExecutor()
+        except Exception:
+            return None
+
+    if backend == "e2b":
+        from ..infrastructure.tools.python_executor_e2b import E2BPythonExecutor
+
+        return E2BPythonExecutor()
+
+    if backend == "self_hosted":
+        from ..infrastructure.tools.python_executor_self_hosted import (
+            SelfHostedPythonExecutorStub,
+        )
+
+        return SelfHostedPythonExecutorStub()
+
+    return None
+
+
 def build_contradiction_detector() -> ContradictionDetector | None:
     """Build an LLM-backed NLI contradiction detector when explicitly enabled
     AND a provider key is configured. Returns ``None`` otherwise so the
@@ -146,10 +194,16 @@ def build_contradiction_detector() -> ContradictionDetector | None:
 
 
 def build_pipeline() -> FactualityPipeline:
+    python_executor = build_python_executor()
+    tool_overrides: dict[str, Tool] = {}
+    if python_executor is not None:
+        tool_overrides["python_executor"] = python_executor
+
     return FactualityPipeline(
         decomposer=build_decomposer(),  # may be None -> pipeline default
         tool_input_translator=build_tool_input_translator(),  # may be None
         contradiction_detector=build_contradiction_detector(),  # may be None
         module_registry=build_module_registry(),
         audit_repo=build_audit_repo(),
+        tools=tool_overrides or None,
     )

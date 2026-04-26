@@ -225,6 +225,9 @@ highest-leverage extensions:
 | Structured-data SQL | `DuckDBSqlExecutor` (in-memory or external connection; identifier validation; per-request `tables=` registration) | `infrastructure/tools/sql_executor.py` |
 | Web retrieval | `TavilyWebRetriever` (httpx; transport-injectable) | `infrastructure/retrieval/tavily_web_retriever.py` |
 | Code execution | `LocalSubprocessPythonExecutor` (fresh interpreter per call, wall-clock timeout, optional rlimits — **not** a hardened sandbox) | `infrastructure/tools/python_executor.py` |
+| Code execution (Anthropic-hosted) | `AnthropicCodeExecutor` (uses Claude's server-side `code_execution_20260120` tool — no second vendor key, generous free tier) | `infrastructure/tools/python_executor_anthropic.py` |
+| Code execution (E2B sandbox) | `E2BPythonExecutor` (ephemeral E2B sandbox per call; `e2b_code_interpreter` is lazy-imported) | `infrastructure/tools/python_executor_e2b.py` |
+| Code execution (self-hosted) | `SelfHostedPythonExecutorStub` (placeholder behind the same protocol; documents the Docker / gVisor / Firecracker integration path) | `infrastructure/tools/python_executor_self_hosted.py` |
 | Causal A/B testing | `ABTestCausalTool` (two-proportion z-test, no scipy) | `infrastructure/tools/ab_test.py` |
 | Causal inference (observational) | `CausalInferenceTool` (DoWhy: backdoor / IV / frontdoor; CI + p-value + refutation) | `infrastructure/tools/causal_inference.py` |
 | Forecasting | `ForecastTool` (statsforecast AutoARIMA; calibrated prediction intervals; baseline + direction scoring) | `infrastructure/tools/forecast.py` |
@@ -241,6 +244,15 @@ to construct properly-shaped `causal_inference`, `forecast`, `sql`, or
 `optimizer` payloads. The translator's output is strictly validated; bad
 output produces no payload (the affected tool fails cleanly) — never a
 fabricated verdict. See `application/tool_input_translator.py`.
+
+**Code-execution backend** is selectable via `FACTUALITY_HARNESS_PYTHON_EXECUTOR`:
+
+| Value | Backend |
+|---|---|
+| `local` (default) | `LocalSubprocessPythonExecutor` — fast, no isolation. |
+| `anthropic` | `AnthropicCodeExecutor` — uses Claude's hosted code-execution tool. |
+| `e2b` | `E2BPythonExecutor` — needs `pip install e2b_code_interpreter` and `E2B_API_KEY`. |
+| `self_hosted` | `SelfHostedPythonExecutorStub` — placeholder for your own Docker/gVisor/Firecracker setup. |
 
 LLM-backed **NLI contradiction detection** is opt-in via
 `FACTUALITY_HARNESS_LLM_CONTRADICTION=1`. When enabled, same-claim evidence

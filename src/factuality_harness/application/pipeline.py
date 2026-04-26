@@ -212,6 +212,14 @@ class FactualityPipeline:
             verdicts=verdicts,
         )
 
+        # 9b — SHADOW modules: observe the active path, record their proposed
+        # verdicts to the audit trace. SHADOW output NEVER affects ``final``.
+        # Failures inside a shadow module are swallowed: they cannot crash the
+        # live pipeline. See domain/module_lifecycle.py for the safety boundary.
+        trace.shadow_verdicts = self._record_shadow_verdicts(
+            updated_claims, evidence, verdicts
+        )
+
         # 10 — draft answer
         draft = self.draft_generator.generate(table)
         trace.draft_answer = draft
@@ -246,3 +254,44 @@ class FactualityPipeline:
         # Reach into the existing evidence_builder's registry so the rebuilt
         # builder shares the same tools.
         return dict(getattr(self.evidence_builder, "_tools", {}))
+
+    def _record_shadow_verdicts(
+        self,
+        claims: list,
+        evidence: list,
+        active_verdicts: list,
+    ) -> list:
+        """Run SHADOW modules over the active path's claims+evidence and
+        return the resulting ``ShadowVerdict`` records. Output is recorded
+        only — the active verdicts are unchanged."""
+        from ..domain.module_lifecycle import ShadowVerdict
+
+        records: list = []
+        active_by_claim = {v.claim_id: v for v in active_verdicts}
+
+        for module in self.module_registry.shadow():
+            for claim in claims:
+                try:
+                    proposed = module.validate_evidence(claim, evidence)
+                except Exception:
+                    # Never let a shadow module crash the live pipeline.
+                    continue
+                if proposed is None:
+                    continue
+                active = active_by_claim.get(claim.id)
+                agrees = (
+                    active is not None
+                    and proposed.verdict == active.verdict
+                )
+                records.append(
+                    ShadowVerdict(
+                        module_name=module.spec.name,
+                        module_version=module.spec.version,
+                        claim_id=claim.id,
+                        proposed_verdict=proposed.verdict.value,
+                        proposed_confidence=proposed.confidence.value,
+                        rationale=proposed.rationale,
+                        agrees_with_active=agrees,
+                    )
+                )
+        return records

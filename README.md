@@ -210,7 +210,39 @@ Test files map to the seven spec checkpoints:
 - `DEPRECATED` — retained for audit; no longer used.
 
 The system may *propose* modules, but it must not promote them to `ACTIVE`
-without passing evaluation thresholds and (optionally) human approval.
+without passing evaluation thresholds and human approval.
+
+### Self-developing module pipeline
+
+`application/module_lifecycle.py::ModuleDevelopmentPipeline` implements the
+spec's 10 stages:
+
+```sh
+# Stages 1-7 — gap → taxonomy → routes → cases. Output is a ModuleProposal.
+fh modules develop --domain finance --examples finance_queries.json --output proposal.json
+
+# Stage 8 — eval the proposal's benchmark cases through the harness.
+# (run `fh evals run` against the proposal's cases via the run_module_evals API.)
+
+# Stage 10 — score the module's eligibility for ACTIVE.
+fh modules evaluate-promotion --name finance --pass-rate 0.95 \
+    --classification 0.95 --overclaim 0.0 --shadow-runs 50 --shadow-agreement 0.9 \
+    > decision.json
+
+# The single sanctioned promotion path. Refuses without --yes.
+fh modules promote --name finance --decision decision.json --yes
+```
+
+Safety boundaries enforced by the pipeline:
+
+- `ModuleProposal.is_deployable` blocks proposals that depend on tools the
+  harness doesn't have wired in — no silent failures from missing connectors.
+- `evaluate_promotion` only decides eligibility; it never flips status.
+- `promote_module` is the only sanctioned write path. It refuses without
+  explicit `human_approval=True` (CLI: `--yes`), even on eligible decisions.
+- SHADOW modules' verdicts are recorded to `AuditTrace.shadow_verdicts` for
+  offline metric collection but **never** affect `FinalAnswer`. Exceptions
+  inside a shadow module are swallowed; they cannot crash the live pipeline.
 
 ## Real adapters available
 

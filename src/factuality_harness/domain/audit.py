@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from .claims import Claim
 from .evidence import Evidence
+from .module_lifecycle import ShadowVerdict
 from .verdicts import ClaimVerdict
 
 
@@ -37,6 +38,9 @@ class AuditTrace(BaseModel):
     retrieved_evidence: list[Evidence] = Field(default_factory=list)
     contradictions_found: list[str] = Field(default_factory=list)
     verdicts: list[ClaimVerdict] = Field(default_factory=list)
+    # SHADOW modules never affect the final answer — their proposed verdicts
+    # are recorded here for offline metric collection only.
+    shadow_verdicts: list[ShadowVerdict] = Field(default_factory=list)
     draft_answer: str = ""
     final_answer: str = ""
     unsupported_claims_removed: list[str] = Field(default_factory=list)

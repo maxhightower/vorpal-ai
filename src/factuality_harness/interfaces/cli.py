@@ -6,6 +6,9 @@ Subcommands mirror the API:
   fh audit AUDIT_ID
   fh modules list
   fh modules propose --domain "..." --examples examples.json
+  fh modules develop --domain "..." --examples examples.json --output proposal.json
+  fh modules evaluate-promotion --name X --pass-rate 0.95 --classification 0.95
+  fh modules promote --name X --decision decision.json --yes
   fh evals run
 """
 
@@ -111,6 +114,134 @@ def modules_propose(
         status=ModuleStatus.DRAFT,
     )
     typer.echo(spec.model_dump_json(indent=2))
+
+
+@modules_app.command("develop")
+def modules_develop(
+    domain: str = typer.Option(..., "--domain"),
+    examples: Path = typer.Option(
+        ..., "--examples", help="JSON list of example queries."
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        help="Write the full ModuleProposal JSON to this path.",
+    ),
+) -> None:
+    """Run lifecycle stages 1-7 (gap → taxonomy → routes → cases) and emit
+    a DRAFT ModuleProposal."""
+    from ..application.module_lifecycle import ModuleDevelopmentPipeline
+
+    queries = json.loads(examples.read_text(encoding="utf-8"))
+    if not isinstance(queries, list) or not all(isinstance(q, str) for q in queries):
+        raise typer.BadParameter("--examples must be a JSON array of strings")
+
+    pipeline = ModuleDevelopmentPipeline()
+    proposal = pipeline.develop_from_queries(
+        domain_name=domain, example_queries=queries
+    )
+
+    if output is not None:
+        output.write_text(proposal.model_dump_json(indent=2), encoding="utf-8")
+
+    typer.echo(
+        f"Domain {domain!r}: proposed module with "
+        f"{len(proposal.taxonomy)} categor(ies), "
+        f"{len(proposal.sources)} source(s), "
+        f"{len(proposal.benchmark_case_names)} benchmark case(s)."
+    )
+    typer.echo(f"is_deployable: {proposal.is_deployable}")
+    if not proposal.is_deployable:
+        missing = [s.source_id for s in proposal.sources if not s.is_existing]
+        typer.echo(f"  missing sources: {missing}")
+    if output is not None:
+        typer.echo(f"Wrote proposal to {output}")
+    else:
+        typer.echo("Pass --output PATH to persist the full proposal as JSON.")
+
+
+@modules_app.command("evaluate-promotion")
+def modules_evaluate_promotion(
+    module_name: str = typer.Option(..., "--name"),
+    module_version: str = typer.Option("0.0.1", "--version"),
+    pass_rate: float = typer.Option(..., "--pass-rate"),
+    classification_accuracy: float = typer.Option(..., "--classification"),
+    overclaim_rate: float = typer.Option(0.0, "--overclaim"),
+    shadow_runs: int = typer.Option(0, "--shadow-runs"),
+    shadow_agreement: float = typer.Option(1.0, "--shadow-agreement"),
+) -> None:
+    """Score a module's eligibility for promotion to ACTIVE.
+
+    Outputs a PromotionDecision JSON. Eligibility never auto-promotes —
+    the decision still requires human approval (see ``modules promote``).
+    """
+    from ..application.module_lifecycle import ModuleDevelopmentPipeline
+    from ..evals.scoring import EvalSummary
+
+    summary = EvalSummary(
+        total_cases=0,
+        passed_cases=0,
+        failed_cases=0,
+        case_pass_rate=pass_rate,
+        metrics={
+            "case_pass_rate": pass_rate,
+            "classification_accuracy": classification_accuracy,
+            "overclaim_rate": overclaim_rate,
+        },
+        cases=[],
+    )
+    pipeline = ModuleDevelopmentPipeline()
+    decision = pipeline.evaluate_promotion(
+        module_name=module_name,
+        module_version=module_version,
+        eval_summary=summary,
+        shadow_run_count=shadow_runs,
+        shadow_agreement_rate=shadow_agreement,
+    )
+    typer.echo(decision.model_dump_json(indent=2))
+
+
+@modules_app.command("promote")
+def modules_promote(
+    module_name: str = typer.Option(..., "--name"),
+    decision_path: Path = typer.Option(
+        ...,
+        "--decision",
+        help="Path to a PromotionDecision JSON produced by `evaluate-promotion`.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Required to actually flip the module to ACTIVE. Without it, "
+        "the command refuses even when the decision is eligible.",
+    ),
+) -> None:
+    """Flip a SHADOW module to ACTIVE. The single sanctioned write path."""
+    from ..application.module_lifecycle import promote_module
+    from ..domain.module_lifecycle import PromotionDecision
+
+    decision = PromotionDecision.model_validate_json(
+        decision_path.read_text(encoding="utf-8")
+    )
+    registry = build_module_registry()
+    if registry.get(module_name) is None:
+        raise typer.BadParameter(
+            f"Module {module_name!r} is not registered."
+        )
+
+    result = promote_module(
+        module_name, registry, decision=decision, human_approval=yes
+    )
+    typer.echo(result.model_dump_json(indent=2))
+    if not result.promoted:
+        if not decision.eligible:
+            typer.echo("Refused: decision is not eligible.")
+        elif not yes:
+            typer.echo(
+                "Refused: --yes required to confirm human approval. "
+                "Promotion not executed."
+            )
+        raise typer.Exit(code=1)
 
 
 @evals_app.command("run")

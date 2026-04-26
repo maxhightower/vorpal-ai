@@ -242,6 +242,15 @@ to construct properly-shaped `causal_inference`, `forecast`, `sql`, or
 output produces no payload (the affected tool fails cleanly) — never a
 fabricated verdict. See `application/tool_input_translator.py`.
 
+LLM-backed **NLI contradiction detection** is opt-in via
+`FACTUALITY_HARNESS_LLM_CONTRADICTION=1`. When enabled, same-claim evidence
+pairs are classified by an LLM as `CONTRADICT` / `ENTAIL` / `NEUTRAL` instead
+of (or in addition to) the antonym-pair table. This catches non-lexical
+conflicts — *"Refunds within 30 days"* vs *"Refunds processed quarterly"* —
+that the default detector misses. The LLM detector falls back to the lexical
+detector on any parse error or exception, so it can never silently hide a
+known antonym-pair contradiction. See `application/contradiction_checker.py`.
+
 Stubs that remain (intentionally honest about what they cannot do):
 
 - Theorem prover (Z3/Lean adapters can be added behind the same protocol).

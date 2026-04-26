@@ -12,7 +12,10 @@ Environment variables that change defaults:
                                       (turns "did X cause Y?" + raw data into a
                                       causal_inference / forecast / sql payload).
                                       Off by default.
-  ANTHROPIC_API_KEY                   preferred LLM for both LLM-backed paths.
+  FACTUALITY_HARNESS_LLM_CONTRADICTION enable LLM-backed NLI contradiction
+                                      detection (catches non-lexical conflicts
+                                      the antonym table misses). Off by default.
+  ANTHROPIC_API_KEY                   preferred LLM for all LLM-backed paths.
   OPENAI_API_KEY                      fallback LLM.
   FACTUALITY_HARNESS_AUDIT_DIR        directory for JSON audit traces.
 """
@@ -25,6 +28,10 @@ from pathlib import Path
 from ..application.claim_decomposer import (
     ClaimDecomposer,
     RuleBasedClaimDecomposer,
+)
+from ..application.contradiction_checker import (
+    ContradictionDetector,
+    LLMContradictionDetector,
 )
 from ..application.llm_claim_decomposer import LLMClaimDecomposer
 from ..application.module_registry import ModuleRegistry
@@ -125,10 +132,24 @@ def build_tool_input_translator() -> ToolInputTranslator | None:
     return LLMToolInputTranslator(llm=llm)
 
 
+def build_contradiction_detector() -> ContradictionDetector | None:
+    """Build an LLM-backed NLI contradiction detector when explicitly enabled
+    AND a provider key is configured. Returns ``None`` otherwise so the
+    pipeline keeps its deterministic lexical default."""
+    flag = os.environ.get("FACTUALITY_HARNESS_LLM_CONTRADICTION", "").strip().lower()
+    if flag not in _TRUTHY:
+        return None
+    llm = _build_llm_for_decomposition()
+    if llm is None:
+        return None
+    return LLMContradictionDetector(llm=llm)
+
+
 def build_pipeline() -> FactualityPipeline:
     return FactualityPipeline(
         decomposer=build_decomposer(),  # may be None -> pipeline default
         tool_input_translator=build_tool_input_translator(),  # may be None
+        contradiction_detector=build_contradiction_detector(),  # may be None
         module_registry=build_module_registry(),
         audit_repo=build_audit_repo(),
     )

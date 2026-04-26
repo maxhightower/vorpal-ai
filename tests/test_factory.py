@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import pytest
 
+from factuality_harness.application.contradiction_checker import (
+    LexicalContradictionDetector,
+    LLMContradictionDetector,
+)
 from factuality_harness.application.llm_claim_decomposer import LLMClaimDecomposer
 from factuality_harness.application.tool_input_translator import (
     LLMToolInputTranslator,
     NullToolInputTranslator,
 )
 from factuality_harness.interfaces.factory import (
+    build_contradiction_detector,
     build_decomposer,
     build_pipeline,
     build_tool_input_translator,
@@ -20,6 +25,7 @@ def _isolate_env(monkeypatch):
     for var in (
         "FACTUALITY_HARNESS_LLM_DECOMPOSER",
         "FACTUALITY_HARNESS_LLM_TRANSLATOR",
+        "FACTUALITY_HARNESS_LLM_CONTRADICTION",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
     ):
@@ -106,3 +112,33 @@ def test_build_pipeline_default_translator_is_null(tmp_path, monkeypatch):
     monkeypatch.setenv("FACTUALITY_HARNESS_AUDIT_DIR", str(tmp_path))
     pipeline = build_pipeline()
     assert isinstance(pipeline.tool_input_translator, NullToolInputTranslator)
+
+
+def test_build_contradiction_detector_default_returns_none():
+    assert build_contradiction_detector() is None
+
+
+def test_build_contradiction_detector_flag_without_keys_returns_none(monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_CONTRADICTION", "1")
+    assert build_contradiction_detector() is None
+
+
+def test_build_contradiction_detector_with_anthropic_key(monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_CONTRADICTION", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    detector = build_contradiction_detector()
+    assert isinstance(detector, LLMContradictionDetector)
+
+
+def test_build_pipeline_default_contradiction_detector_is_lexical(tmp_path, monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_AUDIT_DIR", str(tmp_path))
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.contradiction_detector, LexicalContradictionDetector)
+
+
+def test_build_pipeline_uses_llm_contradiction_detector_when_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("FACTUALITY_HARNESS_AUDIT_DIR", str(tmp_path))
+    monkeypatch.setenv("FACTUALITY_HARNESS_LLM_CONTRADICTION", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.contradiction_detector, LLMContradictionDetector)

@@ -35,7 +35,11 @@ from ..infrastructure.tools.sql_executor import DuckDBSqlExecutor
 from ..infrastructure.tools.theorem_prover_stub import TheoremProverStub
 from .claim_classifier import ClaimClassifier, RuleBasedClaimClassifier
 from .claim_decomposer import ClaimDecomposer, RuleBasedClaimDecomposer
-from .contradiction_checker import check_contradictions
+from .contradiction_checker import (
+    ContradictionDetector,
+    LexicalContradictionDetector,
+    check_contradictions,
+)
 from .draft_generator import DraftGenerator, TemplateDraftGenerator
 from .evidence_builder import EvidenceBuilder
 from .final_verifier import (
@@ -77,6 +81,7 @@ class FactualityPipeline:
         module_registry: ModuleRegistry | None = None,
         tools: dict[str, Tool] | None = None,
         tool_input_translator: ToolInputTranslator | None = None,
+        contradiction_detector: ContradictionDetector | None = None,
     ) -> None:
         self.decomposer = decomposer or RuleBasedClaimDecomposer()
         self.classifier = classifier or RuleBasedClaimClassifier()
@@ -87,6 +92,11 @@ class FactualityPipeline:
         # Default to the no-op translator so existing behavior is preserved.
         self.tool_input_translator = (
             tool_input_translator or NullToolInputTranslator()
+        )
+        # Default to the deterministic lexical detector so behavior is
+        # predictable and tests don't drift into LLM calls.
+        self.contradiction_detector = (
+            contradiction_detector or LexicalContradictionDetector()
         )
 
         # Default retriever: an empty in-memory one that can accept per-request docs.
@@ -186,7 +196,9 @@ class FactualityPipeline:
         trace.tools_called = tool_records
 
         # 7 — contradiction sweep
-        evidence, contradictions = check_contradictions(evidence)
+        evidence, contradictions = check_contradictions(
+            evidence, detector=self.contradiction_detector
+        )
         trace.retrieved_evidence = evidence
         trace.contradictions_found = contradictions
 

@@ -201,11 +201,15 @@ highest-leverage extensions:
 | Causal A/B testing | `ABTestCausalTool` (two-proportion z-test, no scipy) | `infrastructure/tools/ab_test.py` |
 | Causal inference (observational) | `CausalInferenceTool` (DoWhy: backdoor / IV / frontdoor; CI + p-value + refutation) | `infrastructure/tools/causal_inference.py` |
 | Forecasting | `ForecastTool` (statsforecast AutoARIMA; calibrated prediction intervals; baseline + direction scoring) | `infrastructure/tools/forecast.py` |
+| Linear optimization | `LinearOptimizerTool` (scipy.optimize.linprog / HiGHS; supports min/max + <=/==/>= constraints; refuses to run without an explicit objective and constraints) | `infrastructure/tools/optimizer.py` |
+
+LLM-backed claim decomposition is opt-in via `FACTUALITY_HARNESS_LLM_DECOMPOSER=1` plus
+either `ANTHROPIC_API_KEY` (preferred) or `OPENAI_API_KEY`. The `interfaces/factory.py`
+helper wires the right decomposer at pipeline construction time.
 
 Stubs that remain (intentionally honest about what they cannot do):
 
 - Theorem prover (Z3/Lean adapters can be added behind the same protocol).
-- Optimizer (CVXPY/OR-Tools; requires explicit objective + constraints).
 - The fallback `CausalModelStub` (still used when no experimental data is supplied).
 
 ## Known limitations

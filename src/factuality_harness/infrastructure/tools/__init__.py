@@ -4,6 +4,7 @@ from .calculator import CalculatorTool
 from .causal_inference import CausalInferenceTool
 from .causal_model_stub import CausalModelStub
 from .forecast import ForecastTool
+from .optimizer import LinearOptimizerTool
 from .optimizer_stub import OptimizerStub
 from .python_executor import LocalSubprocessPythonExecutor
 from .rule_engine import RuleEngineTool
@@ -22,6 +23,7 @@ __all__ = [
     "CausalModelStub",
     "CausalInferenceTool",
     "ForecastTool",
+    "LinearOptimizerTool",
     "OptimizerStub",
     "ABTestCausalTool",
 ]
